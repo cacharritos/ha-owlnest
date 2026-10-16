@@ -9,7 +9,10 @@ import {
   LightEmissiveController, resolveLightHosts, lightHostsCenter, hostIsOpeningPiece,
 } from './light-emissive';
 import { hasLightHost } from './light-fields';
-import { loadGLTF, detectAnchors, buildAnchorsFromEditable, rebuildAnchorLight, lightTargetPos } from './model';
+import {
+  loadGLTF, detectAnchors, buildAnchorsFromEditable, rebuildAnchorLight, lightTargetPos,
+  syncMeshLightPoses,
+} from './model';
 import { modelErrorKey, httpStatus } from './model-errors';
 import { AnchorOverlay, SensorOverlay, ClusterOverlay, LabelOverlay, CameraOverlay, pulseOverlay } from './overlay';
 import type { ClusterItem } from './overlay';
@@ -23,6 +26,12 @@ import { findLeaves, proposeParts, replaceParts } from './import/sh3d-parts';
 import { setLang, langFromLocale, t } from './i18n';
 import { demoModelUrl, isPlaceholder, seedDemoAnchors, type DemoAnchorId } from './demo';
 import { openEntityPicker } from './entities/picker';
+import {
+  disposeEntryLights, castLightsOf, castLightTargetsOf, ensureRectAreaLightLib,
+} from './light-mesh';
+import {
+  listLightHosts, listLightStyles, hasMeshStyle, hasDirectionalStyle,
+} from './light-fields';
 
 /** Clé de traduction du libellé de chaque ancre de démonstration. */
 const DEMO_LABEL: Record<DemoAnchorId, 'demoFloorLamp' | 'demoBedsideLamp' | 'demoKitchenLamp' | 'demoTelevision'> = {
@@ -1209,11 +1218,7 @@ export class Ha3dFloorplan extends HTMLElement {
   private _rebuildAnchors() {
     if (!this.scene || !this._modelRoot) return;
     this.anchors.forEach((entry) => {
-      if (entry.light) {
-        this.scene?.remove(entry.light);
-        entry.light.dispose();
-      }
-      if (entry.lightTarget) this.scene?.remove(entry.lightTarget);
+      if (this.scene) disposeEntryLights(entry, this.scene);
     });
     this._lightEmissive.dispose();
     this.anchors = detectAnchors(this._modelRoot, this.scene, this._effectiveConfig, this._modelSpan);
@@ -1228,24 +1233,26 @@ export class Ha3dFloorplan extends HTMLElement {
     this._requestRender();
   }
 
-  /** Applique `attachLightToObject` une fois au chargement / rebuild. */
+  /** Applique `attachLightToObject` / pose mesh une fois au chargement / rebuild. */
   private _applyAttachPositions() {
     if (!this._modelRoot) return;
     this.anchors.forEach((entry) => {
-      if (
-        entry.domain !== 'light'
-        || !entry.attachLightToObject
-        || !hasLightHost(entry)
-      ) return;
+      if (entry.domain !== 'light' || !hasLightHost(entry)) return;
       const hosts = resolveLightHosts(this._modelRoot!, entry)
         .filter((h) => !hostIsOpeningPiece(h));
       if (!hosts.length) return;
+      if (hasMeshStyle(entry)) syncMeshLightPoses(entry, hosts);
+      if (!entry.attachLightToObject) return;
+      // Mesh-only : le marqueur peut suivre le centre AABB ; les rects restent sur les hôtes.
       const center = lightHostsCenter(hosts);
       entry.worldPos.copy(center);
-      if (entry.light) entry.light.position.copy(center);
-      if (entry.lightTarget) {
-        entry.lightTarget.position.copy(lightTargetPos(center, entry.lightDirection));
-        entry.lightTarget.updateMatrixWorld();
+      for (const light of castLightsOf(entry)) {
+        if (light instanceof THREE.RectAreaLight) continue;
+        light.position.copy(center);
+      }
+      for (const target of castLightTargetsOf(entry)) {
+        target.position.copy(lightTargetPos(center, entry.lightDirection));
+        target.updateMatrixWorld();
       }
     });
   }
@@ -1493,6 +1500,7 @@ export class Ha3dFloorplan extends HTMLElement {
         label: entry.label,
         hidden: entry.hidden,
         lightStyle: entry.lightStyle,
+        lightStyles: entry.lightStyles ? [...entry.lightStyles] : undefined,
         lightIntensity: entry.lightIntensity,
         lightDirection: entry.lightDirection,
         castLight: entry.castLight,
@@ -1732,20 +1740,20 @@ export class Ha3dFloorplan extends HTMLElement {
     this._editor!.deactivate();
 
     this.anchors.forEach((entry) => {
-      if (entry.light) {
-        this.scene?.remove(entry.light);
-        entry.light.dispose();
-      }
-      if (entry.lightTarget) this.scene?.remove(entry.lightTarget);
+      if (this.scene) disposeEntryLights(entry, this.scene);
     });
 
-    this.anchors = buildAnchorsFromEditable(editable, this.scene!, this._effectiveConfig, this._modelSpan);
+    this.anchors = buildAnchorsFromEditable(
+      editable, this.scene!, this._effectiveConfig, this._modelSpan, this._modelRoot,
+    );
+    this._applyAttachPositions();
 
     if (this.controls) this.controls.enabled = !this._locked;
 
     this._createOverlays();
     if (this._hass) {
       syncLights(this.anchors, this._hass, this._config, this._modelSpan);
+      this._lightEmissive.sync(this._modelRoot, this.anchors, this._hass);
       this._updateOverlayStates();
     }
 
@@ -1761,24 +1769,34 @@ export class Ha3dFloorplan extends HTMLElement {
 
   private _syncEditorLightsToScene() {
     if (!this._editor || !this.scene) return;
+    const hostSig = (a: Parameters<typeof listLightHosts>[0]) =>
+      JSON.stringify(listLightHosts(a));
+    const styleSig = (a: Parameters<typeof listLightStyles>[0]) =>
+      listLightStyles(a).join(',');
+
     this._editor.anchors.forEach((ea, key) => {
       let entry = this.anchors.get(key);
       if (!entry) {
         // Ancre créée en édition : fabriquer l'entrée runtime à la volée.
         if (!this._modelRoot) return;
         const built = buildAnchorsFromEditable(
-          new Map([[key, ea]]), this.scene!, this._effectiveConfig, this._modelSpan,
+          new Map([[key, ea]]), this.scene!, this._effectiveConfig, this._modelSpan, this._modelRoot,
         );
         entry = built.get(key);
         if (!entry) return;
         this.anchors.set(key, entry);
       }
 
-      const newStyle = ea.lightStyle ?? 'point';
-      const oldStyle = entry.lightStyle ?? 'point';
+      const newStyles = listLightStyles(ea);
+      const oldStyles = listLightStyles(entry);
       const newCast = ea.castLight !== false;
-      const oldCast = entry.light !== null;
+      const oldCast = castLightsOf(entry).length > 0;
+      const hostsChanged = hostSig(ea) !== hostSig(entry);
+      const stylesChanged = styleSig(ea) !== styleSig(entry);
       const isLight = ea.entity.split('.')[0] === 'light';
+      const hosts = this._modelRoot && hasLightHost(ea)
+        ? resolveLightHosts(this._modelRoot, ea).filter((h) => !hostIsOpeningPiece(h))
+        : [];
 
       entry.entityId = ea.entity;
       entry.domain = ea.entity.split('.')[0];
@@ -1796,56 +1814,90 @@ export class Ha3dFloorplan extends HTMLElement {
       entry.lightColor = ea.lightColor;
       entry.lightColorTemp = ea.lightColorTemp;
       entry.visibleIf = ea.visibleIf;
+      entry.lightStyle = ea.lightStyle;
+      entry.lightStyles = ea.lightStyles ? [...ea.lightStyles] : undefined;
 
-      // Ancrage au centre AABB combiné des hôtes (lampes statiques).
-      if (
-        ea.attachLightToObject
-        && hasLightHost(ea)
-        && this._modelRoot
-        && isLight
-      ) {
-        const hosts = resolveLightHosts(this._modelRoot, ea)
-          .filter((h) => !hostIsOpeningPiece(h));
-        if (hosts.length) {
+      const needRebuild = isLight && (
+        stylesChanged
+        || newCast !== oldCast
+        || (hasMeshStyle(ea) && hostsChanged)
+        || (oldStyles.includes('mesh') && hostsChanged)
+      );
+
+      const poseNonMesh = (pos: THREE.Vector3) => {
+        for (const light of castLightsOf(entry!)) {
+          if (light instanceof THREE.RectAreaLight) continue;
+          light.position.copy(pos);
+        }
+        for (const target of castLightTargetsOf(entry!)) {
+          target.position.copy(lightTargetPos(pos, ea.lightDirection));
+          target.updateMatrixWorld();
+        }
+      };
+
+      if (needRebuild) {
+        entry.castLight = ea.castLight;
+        rebuildAnchorLight(
+          entry, this.scene!, this._effectiveConfig, newStyles, ea.lightDirection, this._modelSpan, hosts,
+        );
+        for (const light of castLightsOf(entry)) {
+          light.intensity = entry.targetIntensity;
+          light.color.copy(entry.targetColor);
+          light.visible = entry.targetIntensity > 0.01;
+        }
+        if (ea.attachLightToObject && hosts.length) {
           const center = lightHostsCenter(hosts);
+          entry.worldPos.copy(center);
+          poseNonMesh(center);
           if (ea.position.distanceToSquared(center) > 1e-8) {
             this._editor!.moveAnchorTo(key, center);
           }
-          entry.worldPos.copy(center);
         }
+      } else if (hasMeshStyle(ea) && hosts.length) {
+        syncMeshLightPoses(entry, hosts);
+        if (ea.attachLightToObject) {
+          const center = lightHostsCenter(hosts);
+          entry.worldPos.copy(center);
+          poseNonMesh(center);
+          if (ea.position.distanceToSquared(center) > 1e-8) {
+            this._editor!.moveAnchorTo(key, center);
+          }
+        } else {
+          entry.worldPos.copy(ea.position);
+          poseNonMesh(entry.worldPos);
+        }
+      } else if (
+        ea.attachLightToObject
+        && hosts.length
+        && isLight
+      ) {
+        const center = lightHostsCenter(hosts);
+        if (ea.position.distanceToSquared(center) > 1e-8) {
+          this._editor!.moveAnchorTo(key, center);
+        }
+        entry.worldPos.copy(center);
+        poseNonMesh(center);
       } else {
         entry.worldPos.copy(ea.position);
+        poseNonMesh(entry.worldPos);
       }
 
-      if (entry.light) entry.light.position.copy(entry.worldPos);
-      if (entry.lightTarget) {
-        entry.lightTarget.position.copy(lightTargetPos(entry.worldPos, ea.lightDirection));
-        entry.lightTarget.updateMatrixWorld();
-      }
-
-      if (isLight && (newStyle !== oldStyle || newCast !== oldCast)) {
-        entry.castLight = ea.castLight;
-        rebuildAnchorLight(
-          entry, this.scene!, this._effectiveConfig, newStyle, ea.lightDirection, this._modelSpan,
-        );
-        if (entry.light) {
-          entry.light.intensity = entry.targetIntensity;
-          entry.light.color.copy(entry.targetColor);
-          entry.light.visible = entry.targetIntensity > 0.01;
-        }
-      } else if ((newStyle === 'spot' || newStyle === 'beam') && entry.lightTarget) {
-        const newDir = ea.lightDirection;
-        const oldDir = entry.lightDirection;
-        const dirChanged = !newDir !== !oldDir ||
-          (newDir && oldDir && (newDir[0] !== oldDir[0] || newDir[1] !== oldDir[1] || newDir[2] !== oldDir[2]));
-        if (dirChanged) {
-          entry.lightTarget.position.copy(lightTargetPos(entry.worldPos, ea.lightDirection));
-          entry.lightTarget.updateMatrixWorld();
+      if (!needRebuild) {
+        if (hasDirectionalStyle(ea)) {
+          const newDir = ea.lightDirection;
+          const oldDir = entry.lightDirection;
+          const dirChanged = !newDir !== !oldDir ||
+            (newDir && oldDir && (newDir[0] !== oldDir[0] || newDir[1] !== oldDir[1] || newDir[2] !== oldDir[2]));
+          if (dirChanged) {
+            for (const target of castLightTargetsOf(entry)) {
+              target.position.copy(lightTargetPos(entry.worldPos, ea.lightDirection));
+              target.updateMatrixWorld();
+            }
+            entry.lightDirection = ea.lightDirection;
+          }
+        } else {
           entry.lightDirection = ea.lightDirection;
         }
-      } else {
-        entry.lightStyle = ea.lightStyle;
-        entry.lightDirection = ea.lightDirection;
       }
     });
 
@@ -1853,8 +1905,7 @@ export class Ha3dFloorplan extends HTMLElement {
     for (const key of [...this.anchors.keys()]) {
       if (!this._editor.anchors.has(key)) {
         const entry = this.anchors.get(key)!;
-        if (entry.light) { this.scene?.remove(entry.light); entry.light.dispose(); }
-        if (entry.lightTarget) this.scene?.remove(entry.lightTarget);
+        if (this.scene) disposeEntryLights(entry, this.scene);
         this.anchors.delete(key);
       }
     }
@@ -2415,6 +2466,8 @@ export class Ha3dFloorplan extends HTMLElement {
     this._lastQualityKey = qualityKey(this._effectiveConfig);
     // Always alpha:true so transparent_background can be toggled live
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas!, antialias: q.antialias, alpha: true });
+    // Requis pour RectAreaLight (style mesh).
+    ensureRectAreaLightLib();
     this.renderer.setSize(w, h, false);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, q.maxPixelRatio));
     this.renderer.shadowMap.enabled = shadows;
@@ -2745,7 +2798,8 @@ export class Ha3dFloorplan extends HTMLElement {
 
       if (this._sunLight) resizeShadow(this._sunLight, q.sunShadowMap);
       this.anchors.forEach(({ light }) => {
-        if (!light) return;
+        // RectAreaLight n'a pas d'ombres WebGL classiques.
+        if (!light || light instanceof THREE.RectAreaLight) return;
         light.castShadow = q.anchorShadows;
         resizeShadow(light, q.anchorShadowMap);
       });

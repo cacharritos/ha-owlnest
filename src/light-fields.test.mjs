@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   listLightHosts, setLightHosts, sameLightHost, persistLightFields, hasLightHost,
+  listLightStyles, setLightStyles, persistLightStyles, hasDirectionalStyle,
   DEFAULT_EMISSIVE_LEVEL,
 } from './light-fields.mjs';
 
@@ -73,4 +74,22 @@ test('persistLightFields : hors défauts ; multi → lightMeshes', () => {
   });
   assert.equal(many.lightMesh, undefined);
   assert.equal(many.lightMeshes?.length, 2);
+});
+
+test('listLightStyles / setLightStyles : legacy + multi', () => {
+  assert.deepEqual(listLightStyles({}), ['point']);
+  assert.deepEqual(listLightStyles({ lightStyle: 'spot' }), ['spot']);
+  assert.deepEqual(listLightStyles({ lightStyles: ['mesh', 'point', 'mesh'] }), ['point', 'mesh']);
+  const a = {};
+  setLightStyles(a, ['spot']);
+  assert.equal(a.lightStyle, 'spot');
+  assert.equal(a.lightStyles, undefined);
+  setLightStyles(a, ['point', 'mesh']);
+  assert.equal(a.lightStyle, undefined);
+  assert.deepEqual(a.lightStyles, ['point', 'mesh']);
+  assert.equal(hasDirectionalStyle({ lightStyles: ['point', 'beam'] }), true);
+  assert.deepEqual(persistLightStyles({ lightStyles: ['point', 'spot'] }), {
+    lightStyles: ['point', 'spot'],
+  });
+  assert.deepEqual(persistLightStyles({ lightStyle: 'point' }), {});
 });

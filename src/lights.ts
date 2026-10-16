@@ -171,22 +171,34 @@ export function stepTransitions(
   const alpha = 1 - Math.exp(-dt / tau);
   let active = false;
 
-  anchors.forEach(({ light, targetIntensity, targetColor }) => {
-    if (!light) return;
-    const dI = Math.abs(light.intensity - targetIntensity);
-    const dR = Math.abs(light.color.r - targetColor.r);
-    const dG = Math.abs(light.color.g - targetColor.g);
-    const dB = Math.abs(light.color.b - targetColor.b);
+  anchors.forEach((entry) => {
+    const { targetIntensity, targetColor } = entry;
+    const lights: Array<THREE.PointLight | THREE.SpotLight | THREE.RectAreaLight> = [];
+    const seen = new Set<THREE.Light>();
+    const push = (l: typeof lights[number] | null | undefined) => {
+      if (!l || seen.has(l)) return;
+      seen.add(l);
+      lights.push(l);
+    };
+    push(entry.light);
+    for (const l of entry.extraLights ?? []) push(l);
+    for (const l of entry.meshLights ?? []) push(l);
+    for (const light of lights) {
+      const dI = Math.abs(light.intensity - targetIntensity);
+      const dR = Math.abs(light.color.r - targetColor.r);
+      const dG = Math.abs(light.color.g - targetColor.g);
+      const dB = Math.abs(light.color.b - targetColor.b);
 
-    if (dI > 0.002 || dR > 0.002 || dG > 0.002 || dB > 0.002) {
-      light.intensity = THREE.MathUtils.lerp(light.intensity, targetIntensity, alpha);
-      light.color.lerp(targetColor, alpha);
-      light.visible = light.intensity > 0.01 || targetIntensity > 0;
-      active = true;
-    } else {
-      light.intensity = targetIntensity;
-      light.color.copy(targetColor);
-      light.visible = targetIntensity > 0;
+      if (dI > 0.002 || dR > 0.002 || dG > 0.002 || dB > 0.002) {
+        light.intensity = THREE.MathUtils.lerp(light.intensity, targetIntensity, alpha);
+        light.color.lerp(targetColor, alpha);
+        light.visible = light.intensity > 0.01 || targetIntensity > 0;
+        active = true;
+      } else {
+        light.intensity = targetIntensity;
+        light.color.copy(targetColor);
+        light.visible = targetIntensity > 0;
+      }
     }
   });
 

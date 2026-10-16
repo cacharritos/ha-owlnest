@@ -12,7 +12,7 @@ export type EntityDomain =
   | 'binary_sensor'
   | string;
 
-export type LightStyle = 'point' | 'spot' | 'beam';
+export type LightStyle = 'point' | 'spot' | 'beam' | 'mesh';
 
 /**
  * Nature d'une ancre — orthogonale au domaine de l'entité.
@@ -112,6 +112,8 @@ export interface AnchorConfig {
   label?: string;
   hidden?: boolean;
   lightStyle?: LightStyle;
+  /** Plusieurs styles de cast actifs (si >1). Un seul reste en `lightStyle`. */
+  lightStyles?: LightStyle[];
   lightIntensity?: number;
   lightDirection?: [number, number, number];
   castLight?: boolean;
@@ -167,6 +169,8 @@ export interface OwlnestAnchor {
   visible?: boolean;
   variant?: string;
   lightStyle?: LightStyle;
+  /** Plusieurs styles de cast actifs (si >1). Un seul reste en `lightStyle`. */
+  lightStyles?: LightStyle[];
   lightIntensity?: number;
   lightDirection?: [number, number, number];
   /**
@@ -511,8 +515,14 @@ export interface CardConfig {
 // ── Runtime types ──────────────────────────────────────────────────────────
 
 export interface AnchorEntry {
-  light: THREE.PointLight | THREE.SpotLight | null;
+  light: THREE.PointLight | THREE.SpotLight | THREE.RectAreaLight | null;
+  /** Point/Spot additionnels quand plusieurs styles de cast sont actifs. */
+  extraLights?: Array<THREE.PointLight | THREE.SpotLight>;
+  /** RectAreaLights (style `mesh`, un rectangle par hôte). */
+  meshLights?: THREE.RectAreaLight[];
   lightTarget?: THREE.Object3D;
+  /** Cibles Spot additionnelles (spot+beam, etc.). */
+  extraLightTargets?: THREE.Object3D[];
   worldPos: THREE.Vector3;
   entityId: string;
   domain: EntityDomain;
@@ -521,6 +531,7 @@ export interface AnchorEntry {
   label: string;
   hidden?: boolean;
   lightStyle?: LightStyle;
+  lightStyles?: LightStyle[];
   lightIntensity?: number;
   lightDirection?: [number, number, number];
   castLight?: boolean;
@@ -577,6 +588,7 @@ export interface EditableAnchor {
   label: string;
   hidden?: boolean;
   lightStyle?: LightStyle;
+  lightStyles?: LightStyle[];
   lightIntensity?: number;
   lightDirection?: [number, number, number];
   castLight?: boolean;

@@ -33,6 +33,7 @@ const ENTRIES = [
   'src/lights.ts',
   'src/light-fields.ts',
   'src/light-emissive.ts',
+  'src/light-mesh.ts',
   'src/batching.ts',
   'src/scale.ts',
   'src/model-errors.ts',

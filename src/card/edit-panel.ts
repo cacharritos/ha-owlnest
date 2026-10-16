@@ -24,9 +24,9 @@ import {
 import { haProvidesLightColor } from '../lights';
 import {
   DEFAULT_EMISSIVE_LEVEL, hasLightHost, listLightHosts, setLightHosts, sameLightHost,
-  copyLightHostFields,
+  copyLightHostFields, listLightStyles, setLightStyles, hasDirectionalStyle, hasMeshStyle,
 } from '../light-fields';
-import type { LightHostRef } from '../types';
+import type { LightHostRef, LightStyle } from '../types';
 
 /** Mode du pick partagé ouvrants / hôte lumière. */
 export type PartPickMode = 'part' | 'lightHost';
@@ -3563,30 +3563,47 @@ export class EditPanel {
     castBody.appendChild(intensityWrap);
 
     const styleRow = document.createElement('div');
-    styleRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin:10px 0;';
-    const styleConfigs: { id: import('../types').LightStyle; label: string; icon: string }[] = [
+    styleRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin:10px 0;';
+    const styleConfigs: { id: LightStyle; label: string; icon: string }[] = [
       { id: 'point', label: t('lightStyleAmbient'), icon: '○' },
       { id: 'spot', label: t('lightStyleSpot'), icon: '◎' },
       { id: 'beam', label: t('lightStyleBeam'), icon: '⊙' },
+      { id: 'mesh', label: t('lightStyleMesh'), icon: '▭' },
     ];
-    let currentStyle = draft.lightStyle ?? 'point';
+    const styleHint = document.createElement('div');
+    styleHint.style.cssText = 'font-size:9px;color:#64748b;line-height:1.4;margin:0 0 6px;';
+    styleHint.textContent = t('lightStylesMultiHint');
+    castBody.appendChild(styleHint);
     const styleBtns: HTMLButtonElement[] = [];
     const syncStyleBtns = () => {
+      const active = new Set(listLightStyles(draft));
+      const canMesh = hasLightHost(draft);
       styleBtns.forEach((b, i) => {
-        const on = styleConfigs[i].id === currentStyle;
+        const id = styleConfigs[i].id;
+        const on = active.has(id);
+        const disabled = id === 'mesh' && !canMesh;
+        b.disabled = disabled;
+        b.style.opacity = disabled ? '0.35' : '1';
+        b.style.cursor = disabled ? 'not-allowed' : 'pointer';
         b.style.background = on ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.05)';
         b.style.color = on ? '#fbbf24' : 'rgba(255,255,255,0.4)';
         b.style.borderColor = on ? 'rgba(251,191,36,0.5)' : 'rgba(255,255,255,0.08)';
+        b.title = id === 'mesh' && !canMesh ? t('lightStyleMeshNeedHost') : '';
       });
-      dirHint.style.display = (currentStyle === 'spot' || currentStyle === 'beam') ? 'block' : 'none';
+      dirHint.style.display = hasDirectionalStyle(draft) ? 'block' : 'none';
+      meshHint.style.display = hasMeshStyle(draft) ? 'block' : 'none';
     };
     styleConfigs.forEach(({ id, label, icon }) => {
       const btn = document.createElement('button');
       btn.style.cssText = 'border:1px solid rgba(255,255,255,0.08);border-radius:7px;padding:5px 2px;cursor:pointer;font-size:10px;font-family:inherit;line-height:1.3;display:flex;flex-direction:column;align-items:center;gap:2px;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.4);';
       btn.innerHTML = `<span style="font-size:14px">${icon}</span><span>${label}</span>`;
       btn.addEventListener('click', () => {
-        currentStyle = id;
-        draft.lightStyle = id;
+        if (id === 'mesh' && !hasLightHost(draft)) return;
+        const set = new Set(listLightStyles(draft));
+        if (set.has(id)) set.delete(id);
+        else set.add(id);
+        if (set.size === 0) set.add('point');
+        setLightStyles(draft, [...set]);
         syncStyleBtns();
         apply();
       });
@@ -3599,6 +3616,10 @@ export class EditPanel {
     dirHint.style.cssText = 'font-size:9px;color:#64748b;line-height:1.5;margin-bottom:8px;';
     dirHint.innerHTML = t('orientationGizmoHint');
     castBody.appendChild(dirHint);
+    const meshHint = document.createElement('div');
+    meshHint.style.cssText = 'font-size:9px;color:#64748b;line-height:1.5;margin-bottom:8px;display:none;';
+    meshHint.textContent = t('lightStyleMeshHint');
+    castBody.appendChild(meshHint);
     syncStyleBtns();
 
     // Color 3D (fallback)
@@ -3812,6 +3833,10 @@ export class EditPanel {
         draft.emissiveLevel = undefined;
         draft.linkEmissiveBrightness = undefined;
         draft.attachLightToObject = undefined;
+        // Mesh exige un hôte : on le retire de la sélection.
+        if (hasMeshStyle(draft)) {
+          setLightStyles(draft, listLightStyles(draft).filter((s) => s !== 'mesh'));
+        }
       }
       apply();
       paintSections();
@@ -3919,8 +3944,12 @@ export class EditPanel {
       const host = hasLightHost(draft);
       castBody.style.display = cast ? 'block' : 'none';
       emBox.style.display = host ? 'block' : 'none';
-      attachWrap.style.display = (cast && host) ? 'flex' : 'none';
+      // Ancrage utile dès qu'il reste une Point/Spot/Beam (mesh suit déjà les hôtes).
+      const styles = listLightStyles(draft);
+      const hasPositional = styles.some((s) => s !== 'mesh');
+      attachWrap.style.display = (cast && host && hasPositional) ? 'flex' : 'none';
       clearHost.style.display = host ? 'block' : 'none';
+      syncStyleBtns();
       refreshColorHint();
       paintEm();
     };

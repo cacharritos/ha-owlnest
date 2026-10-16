@@ -6,11 +6,14 @@
  * en liste.
  */
 import type {
-  AnchorConfig, AnchorEntry, EditableAnchor, LightHostRef, OwlnestAnchor,
+  AnchorConfig, AnchorEntry, EditableAnchor, LightHostRef, LightStyle, OwlnestAnchor,
 } from './types';
 
 /** Tope d'émisivité par défaut lorsqu'un hôte GLB est désigné. */
 export const DEFAULT_EMISSIVE_LEVEL = 0.8;
+
+/** Ordre canonique des styles de cast (UI + persistance). */
+export const LIGHT_STYLE_ORDER: LightStyle[] = ['point', 'spot', 'beam', 'mesh'];
 
 export type LightHostFields = {
   castLight?: boolean;
@@ -23,6 +26,11 @@ export type LightHostFields = {
   attachLightToObject?: boolean;
   lightColor?: string;
   lightColorTemp?: number;
+};
+
+export type LightStyleFields = {
+  lightStyle?: LightStyle;
+  lightStyles?: LightStyle[];
 };
 
 function hostKey(h: LightHostRef): string {
@@ -96,11 +104,63 @@ export function sameLightHost(a: LightHostRef, b: LightHostRef): boolean {
   return !!a.mesh && a.mesh === b.mesh;
 }
 
+/** Styles de cast actifs (legacy `lightStyle` → un élément ; défaut `point`). */
+export function listLightStyles(a: LightStyleFields): LightStyle[] {
+  if (a.lightStyles?.length) {
+    const seen = new Set<LightStyle>();
+    const out: LightStyle[] = [];
+    for (const s of a.lightStyles) {
+      if (!LIGHT_STYLE_ORDER.includes(s) || seen.has(s)) continue;
+      seen.add(s);
+      out.push(s);
+    }
+    if (out.length) {
+      return LIGHT_STYLE_ORDER.filter((s) => seen.has(s));
+    }
+  }
+  if (a.lightStyle && LIGHT_STYLE_ORDER.includes(a.lightStyle)) {
+    return [a.lightStyle];
+  }
+  return ['point'];
+}
+
+/** Écrit la sélection de styles (mono → `lightStyle`, multi → `lightStyles`). */
+export function setLightStyles(a: LightStyleFields, styles: LightStyle[]): void {
+  const list = listLightStyles({ lightStyles: styles });
+  if (list.length <= 1) {
+    const s = list[0] ?? 'point';
+    a.lightStyle = s === 'point' ? undefined : s;
+    a.lightStyles = undefined;
+  } else {
+    a.lightStyles = list;
+    a.lightStyle = undefined;
+  }
+}
+
+export function hasDirectionalStyle(a: LightStyleFields): boolean {
+  return listLightStyles(a).some((s) => s === 'spot' || s === 'beam');
+}
+
+export function hasMeshStyle(a: LightStyleFields): boolean {
+  return listLightStyles(a).includes('mesh');
+}
+
+/** Persistance styles : un → `lightStyle`, plusieurs → `lightStyles` seul. */
+export function persistLightStyles(a: LightStyleFields): LightStyleFields {
+  const list = listLightStyles(a);
+  if (list.length === 1) {
+    return list[0] === 'point' ? {} : { lightStyle: list[0] };
+  }
+  return { lightStyles: list };
+}
+
 /**
  * Ne garde que les valeurs hors défaut, pour ne pas grossir les scènes anciennes.
  */
-export function persistLightFields(a: LightHostFields): LightHostFields {
-  const out: LightHostFields = {};
+export function persistLightFields(a: LightHostFields & LightStyleFields): LightHostFields & LightStyleFields {
+  const out: LightHostFields & LightStyleFields = {
+    ...persistLightStyles(a),
+  };
   if (a.castLight === false) out.castLight = false;
   const hosts = listLightHosts(a);
   if (hosts.length === 1) {
@@ -126,8 +186,8 @@ export function persistLightFields(a: LightHostFields): LightHostFields {
   return out;
 }
 
-/** Recopie runtime (toutes formes d'hôtes). */
-export function copyLightHostFields(src: LightHostFields): LightHostFields {
+/** Recopie runtime (hôtes + styles). */
+export function copyLightHostFields(src: LightHostFields & LightStyleFields): LightHostFields & LightStyleFields {
   return {
     castLight: src.castLight,
     lightMesh: src.lightMesh,
@@ -139,11 +199,13 @@ export function copyLightHostFields(src: LightHostFields): LightHostFields {
     attachLightToObject: src.attachLightToObject,
     lightColor: src.lightColor,
     lightColorTemp: src.lightColorTemp,
+    lightStyle: src.lightStyle,
+    lightStyles: src.lightStyles ? [...src.lightStyles] : undefined,
   };
 }
 
 export function lightFieldsFromAnchor(
   a: OwlnestAnchor | AnchorConfig | EditableAnchor | AnchorEntry,
-): LightHostFields {
+): LightHostFields & LightStyleFields {
   return copyLightHostFields(a);
 }
