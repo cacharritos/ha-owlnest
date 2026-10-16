@@ -31,6 +31,8 @@ const ENTRIES = [
   'src/part-carry.ts',
   'src/coplanar.ts',
   'src/lights.ts',
+  'src/light-fields.ts',
+  'src/light-emissive.ts',
   'src/batching.ts',
   'src/scale.ts',
   'src/model-errors.ts',

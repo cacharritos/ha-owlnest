@@ -88,7 +88,22 @@ For `light` entities, three styles are available:
 | `spot` | Directed cone beam (recessed spotlight) |
 | `beam` | Narrow focused beam (projector) |
 
-Style and direction are configured in the anchor properties in edit mode.
+Style, direction and the options below are configured in the **light floating panel** (edit mode: place a light, or click its marker / list row → **Edit light…**).
+
+### Light modes, object and emissive
+
+A light anchor can:
+
+| Mode | How |
+|---|---|
+| **3D light only** | Cast a Point/Spot (default). No GLB object required. |
+| **Emissive only** | Turn off “Cast 3D light” and pick mesh(es) on the model — the objects glow, no Point/Spot. |
+| **Both** | Cast light and pick host mesh(es) for emissive glow. |
+
+- **Object(s)**: optional unless you use emissive (then at least one). Pick on the model or in the object tree; **Ctrl+click** toggles meshes in/out of the selection (plain click replaces). Clear removes all.
+- **Emissive**: glow on **every** selected host using the **same colour** as the 3D light; strength slider; optionally linked to HA brightness.
+- **Anchor light to object**: when host(s) are set and 3D light is on, the light position snaps to the **combined bounding-box centre** of the hosts (static lamps; no continuous animation tracking).
+- **Colour**: HA `rgb_color` / `hs_color` / `color_temp` win when present; otherwise the panel’s colour / mired temperature is used as a fallback — for both the Point/Spot and the emissive.
 
 
 ### Interactions
@@ -112,6 +127,13 @@ Configure this in anchor properties → **Visible if** in the editor.
 | `icon` | Custom MDI icon (e.g. `mdi:thermometer`) |
 | `precision` | Decimal places for sensors (e.g. `0` → "18", `1` → "17.6") |
 | `lightIntensity` | Light intensity multiplier (default: 1) |
+| `castLight` | Emit a 3D Point/Spot (`false` = emissive only) |
+| `lightMesh` / `lightMeshIndex` / `lightTriangle` | Single GLB host (legacy / when only one) |
+| `lightMeshes` | Several GLB hosts `{ mesh, meshIndex?, triangle? }[]` (stored when more than one) |
+| `emissiveLevel` | Max emissive intensity on the host(s) (default 0.8) |
+| `linkEmissiveBrightness` | Scale emissive by HA brightness (default true when a host is set) |
+| `attachLightToObject` | Place the 3D light at the combined host AABB centre |
+| `lightColor` / `lightColorTemp` | Fallback colour (`#rrggbb`) / mireds for the Point/Spot and the emissive |
 
 ---
 

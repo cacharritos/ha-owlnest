@@ -88,7 +88,22 @@ Pour les entités `light`, trois styles sont disponibles :
 | `spot` | Faisceau conique dirigé (spot encastré) |
 | `beam` | Faisceau étroit et concentré (projecteur) |
 
-Le style et la direction se configurent dans les propriétés de l'ancre en mode édition.
+Le style, la direction et les options ci-dessous se règlent dans le **flotante lumière** (mode édition : placer une lumière, ou cliquer son marqueur / sa ligne → **Modifier la lumière…**).
+
+### Modes, objet et émisivité
+
+Une ancre lumière peut :
+
+| Mode | Comment |
+|---|---|
+| **Lumière 3D seule** | Émettre une Point/Spot (défaut). Aucun objet GLB requis. |
+| **Émisivité seule** | Décocher « Émettre une lumière 3D » et choisir une ou plusieurs mailles — les objets brillent, sans Point/Spot. |
+| **Les deux** | Lumière 3D + maille(s) hôte(s) pour l’émisivité. |
+
+- **Objet(s)** : optionnel sauf pour l’émisivité (alors au moins un). Clic sur le modèle ou arbre d’objets ; **Ctrl+clic** ajoute/retire une maille (clic simple remplace). Bouton pour tout retirer.
+- **Émisivité** : lueur sur **chaque** hôte choisi avec la **même couleur** que la lumière 3D ; curseur d’intensité ; liaison optionnelle à la luminosité HA.
+- **Ancrer la lumière à l’objet** : si un ou plusieurs hôtes sont choisis et la lumière 3D active, la position passe au **centre de la boîte englobante combinée** (lampes statiques ; pas de suivi d’animation continu).
+- **Couleur** : `rgb_color` / `hs_color` / `color_temp` HA priment ; sinon couleur / température (mireds) du panneau en secours — pour la Point/Spot **et** l’émisivité.
 
 
 ### Interactions
@@ -112,6 +127,13 @@ Configurez cela dans les propriétés de l'ancre → **Visible si** dans l'édit
 | `icon` | Icône MDI personnalisée (ex: `mdi:thermometer`) |
 | `precision` | Nombre de décimales pour les capteurs (ex: `0` → "18", `1` → "17.6") |
 | `lightIntensity` | Multiplicateur d'intensité lumineuse (défaut: 1) |
+| `castLight` | Émettre une Point/Spot 3D (`false` = émisivité seule) |
+| `lightMesh` / `lightMeshIndex` / `lightTriangle` | Hôte GLB unique (historique / un seul) |
+| `lightMeshes` | Plusieurs hôtes GLB `{ mesh, meshIndex?, triangle? }[]` (si plus d’un) |
+| `emissiveLevel` | Intensité émissive max sur le(s) hôte(s) (défaut 0.8) |
+| `linkEmissiveBrightness` | Émisivité × luminosité HA (défaut true s’il y a un hôte) |
+| `attachLightToObject` | Placer la lumière 3D au centre AABB combiné des hôtes |
+| `lightColor` / `lightColorTemp` | Couleur de secours (`#rrggbb`) / mireds pour la Point/Spot et l’émisivité |
 
 ---
 

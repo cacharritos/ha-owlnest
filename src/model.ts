@@ -4,6 +4,12 @@ import type { AnchorEntry, AnchorConfig, CardConfig, EditableAnchor, LightStyle 
 import { qualityFromConfig } from './quality';
 import { lightScale } from './lights';
 import { bustCache, shouldRetryUncached } from './model-errors';
+import { copyLightHostFields, type LightHostFields } from './light-fields';
+
+/** Champs lumière optionnels, recopiés tels quels (lecture runtime). */
+function takeLightFields(src: LightHostFields): LightHostFields {
+  return copyLightHostFields(src);
+}
 
 function fetchGLTF(url: string): Promise<THREE.Group> {
   const loader = new GLTFLoader();
@@ -115,7 +121,7 @@ export function rebuildAnchorLight(
   if (entry.light) { scene.remove(entry.light); entry.light.dispose(); }
   if (entry.lightTarget) scene.remove(entry.lightTarget);
 
-  if (entry.domain !== 'light') {
+  if (entry.domain !== 'light' || entry.castLight === false) {
     entry.light = null;
     entry.lightTarget = undefined;
     return;
@@ -143,7 +149,8 @@ export function detectAnchors(
       const key = `anchor_cfg_${idx}`;
       const domain = ac.entity.split('.')[0];
       const worldPos = new THREE.Vector3(...ac.position);
-      const { light, target } = domain === 'light'
+      const cast = domain === 'light' && ac.castLight !== false;
+      const { light, target } = cast
         ? makeLight(worldPos, scene, config, ac.lightStyle ?? 'point', ac.lightDirection, span)
         : { light: null, target: undefined };
       anchors.set(key, {
@@ -159,6 +166,7 @@ export function detectAnchors(
         lightStyle: ac.lightStyle,
         lightIntensity: ac.lightIntensity,
         lightDirection: ac.lightDirection,
+        ...takeLightFields(ac),
         visibleIf: ac.visibleIf,
         precision: ac.precision,
         icon: ac.icon,
@@ -209,7 +217,8 @@ export function buildAnchorsFromEditable(
   editable.forEach((ea, key) => {
     const domain = ea.entity.split('.')[0];
     const worldPos = ea.position.clone();
-    const { light, target } = domain === 'light'
+    const cast = domain === 'light' && ea.castLight !== false;
+    const { light, target } = cast
       ? makeLight(worldPos, scene, config, ea.lightStyle ?? 'point', ea.lightDirection, span)
       : { light: null, target: undefined };
     anchors.set(key, {
@@ -225,6 +234,7 @@ export function buildAnchorsFromEditable(
       lightStyle: ea.lightStyle,
       lightIntensity: ea.lightIntensity,
       lightDirection: ea.lightDirection,
+      ...takeLightFields(ea),
       visibleIf: ea.visibleIf,
       precision: ea.precision,
       icon: ea.icon,

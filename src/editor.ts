@@ -204,6 +204,21 @@ export class AnchorEditor {
 
   selectAnchor(key: string) { this._selectAnchor(key); }
 
+  /** Déplace une ancre (marqueur + gizmos) sans entrée d'historique. */
+  moveAnchorTo(key: string, pos: THREE.Vector3) {
+    const anchor = this._anchors.get(key);
+    if (!anchor) return;
+    anchor.position.copy(pos);
+    this._markers.get(key)?.position.copy(pos);
+    if (key === this._selectedKey) {
+      this._gizmoGroup?.position.copy(pos);
+      this._rotGizmoGroup?.position.copy(pos);
+    }
+  }
+
+  /** Appelé juste après la création d'une ancre (placement + entité). */
+  onAnchorCreated: ((key: string, anchor: EditableAnchor) => void) | null = null;
+
   updateAnchor(key: string, props: Partial<EditableAnchor>) {
     const anchor = this._anchors.get(key);
     if (!anchor) return;
@@ -571,8 +586,11 @@ export class AnchorEditor {
       this._anchors.set(key, anchor);
       this._addMarker(key, anchor.position);
       this.setTool('select');
-      this._selectAnchor(key);
       this._pendingPos = null;
+      // Avant la sélection : le flotante lumière doit s'ouvrir en « nouveau »
+      // (Annuler = supprimer), pas seulement en édition.
+      this.onAnchorCreated?.(key, anchor);
+      this._selectAnchor(key);
       this.onChanged?.();
       this.onToolChange?.('select');
     };

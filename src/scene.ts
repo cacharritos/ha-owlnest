@@ -6,6 +6,7 @@
  */
 
 import type { Hass, CardConfig, OwlnestScene, OwlnestAnchor, CameraView, EditableAnchor } from './types';
+import { persistLightFields } from './light-fields';
 
 // ── WebSocket helpers ──────────────────────────────────────────────────────
 
@@ -220,6 +221,7 @@ export function sceneToEffectiveConfig(scene: OwlnestScene, base: CardConfig): C
       lightStyle: a.lightStyle,
       lightIntensity: a.lightIntensity,
       lightDirection: a.lightDirection,
+      ...persistLightFields(a),
       visibleIf: a.visibleIf,
       precision: a.precision,
       icon: a.icon,
@@ -266,6 +268,7 @@ export function buildSceneFromEditor(
       lightStyle: a.lightStyle,
       lightIntensity: a.lightIntensity,
       lightDirection: a.lightDirection,
+      ...persistLightFields(a),
       visibleIf: a.visibleIf,
       precision: a.precision,
       icon: a.icon,
