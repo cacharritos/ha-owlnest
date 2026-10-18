@@ -23,7 +23,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 /** En dessous, fusionner ne rapporte rien. */
 const MIN_GROUP = 2;
 
-/** Un objet qui appartient à un ouvrant, une lumière vivante, ou que la carte a ajouté. */
+/** Un objet qui appartient à un ouvrant, une lumière / effet live, ou que la carte a ajouté. */
 function isMoving(o: THREE.Object3D, root: THREE.Object3D): boolean {
   for (let n: THREE.Object3D | null = o; n && n !== root; n = n.parent) {
     if (
