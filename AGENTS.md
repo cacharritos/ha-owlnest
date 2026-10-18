@@ -49,3 +49,12 @@ Context for coding agents working on this repo. Only what the code doesn't tell 
 - `gh` is installed and authenticated as `cacharritos`. If it isn't found, refresh PATH: `$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')`.
 - **Ask before pushing, opening PRs or merging.**
 - Windows: CRLF/LF warnings and line-ending-only diffs show up; don't commit EOL-only changes (check with `git diff --ignore-cr-at-eol`).
+
+## Cursor Cloud specific instructions
+
+- `npm ci` is enough to install. The default image's Node 22 runs `npm run typecheck`, `npm test`, and `npm run build`. CI pins Node 20; the lockfile works on both.
+- The app you can run here is the simulated demo: `npm run demo -- --host 0.0.0.0 --port 5180` (`vite.demo.config.js`). It serves the real card on `custom_components/owlnest/frontend/demo.glb` with a fake Home Assistant. Open `http://127.0.0.1:5180/`.
+- `npm run dev` (port 5173) only serves the card module for a real dashboard. It has no page of its own.
+- Python checks do not need Home Assistant installed: `python3 -m unittest discover checks`.
+- `HA_URL` and `HA_TOKEN` (see `.env.example`) are only for `npm run dev:ha`, which talks to a Home Assistant on the user's LAN. That instance is not reachable from a Cloud Agent. Do not block on a token.
+- Never run `npm run release` or bump versions.
