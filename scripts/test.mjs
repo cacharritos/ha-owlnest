@@ -30,6 +30,8 @@ const ENTRIES = [
   'src/part-tint.ts',
   'src/part-carry.ts',
   'src/effects-runtime.ts',
+  'src/state-value-label.ts',
+  'src/scene.ts',
   'src/coplanar.ts',
   'src/lights.ts',
   'src/light-fields.ts',
