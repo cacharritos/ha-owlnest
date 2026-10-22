@@ -23288,7 +23288,7 @@ function Z6(i, e = /* @__PURE__ */ new Date()) {
   };
   return JSON.stringify(t, null, 2);
 }
-const uo = (i) => !!i && typeof i == "object" && !Array.isArray(i), Q6 = ["anchors", "camera_views", "cards", "rules", "parts"];
+const uo = (i) => !!i && typeof i == "object" && !Array.isArray(i), Q6 = ["anchors", "camera_views", "cards", "rules", "parts", "effects"];
 function e7(i) {
   let e;
   try {
@@ -23316,7 +23316,9 @@ function e7(i) {
     camera_views: t.camera_views ?? [],
     cards: t.cards ?? [],
     rules: t.rules ?? [],
-    parts: t.parts ?? []
+    parts: t.parts ?? [],
+    // Comme parts : une scène exportée avec des effets doit les retrouver à l'import.
+    effects: t.effects ?? []
   };
 }
 function t7(i, e) {
